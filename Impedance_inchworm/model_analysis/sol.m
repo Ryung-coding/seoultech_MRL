@@ -17,43 +17,49 @@ c2 = 0.01;              %      [Ns/m]
 tau=0.0005;
 delta_1=c1/tau-k1;
 delta_2=c2/tau-k2;
-x0 = [0; 0; 0; 0];                                 %initial state
+x0 = [0; 0; 0; 0; 0; 0];                                 %initial state
 x0_initial=x0;
     
 q1=zeros(1,sampling_num);
 q1_dot=zeros(1,sampling_num);
 q2=zeros(1,sampling_num);
 q2_dot=zeros(1,sampling_num);
+phi1=zeros(1,sampling_num);
+phi2=zeros(1,sampling_num);
     
 theta1=zeros(1,sampling_num);
 theta2=zeros(1,sampling_num);
     
-X = [q1; q1_dot; q2; q2_dot];
+X = [q1; q1_dot; q2; q2_dot; phi1; phi2];
 X(:,1) = x0;
 U = [theta1; theta2];
 
-Xr = [q1; q1_dot; q2; q2_dot];
+Xr = [q1; q1_dot; q2; q2_dot; phi1; phi2];
 buf=zeros(1,N);
 
 % Simulate in closed loop
 for i = 1 : sampling_num
     %control value
-    HZ=1; %hz
+    HZ=0.1; %hz
     w=HZ/(2*pi);
-    xr = [0.5*sin(w*i); 0; sin(w*i); 0]; %rad rad/s rad rad/s
-    %xr = [deg2rad(20); 0; deg2rad(40); 0]; %rad rad/s rad rad/s
+    xr = [0.5*sin(w*i); 0; sin(w*i); 0; 0; 0]; %rad rad/s rad rad/s rad rad
+    xr = [deg2rad(20); 0; deg2rad(40); 0; 0; 0;]; %rad rad/s rad rad/s rad rad
     Xr(:,i+1) = xr;
     
-    Ac = [      0           1          0         0   ;
-          -(k1+k2)/J1  -(c1+c2)/J1   k2/J1     c2/J1 ;
-                0           0          0         1   ;
-              k2/J2       c2/J2     -k2/J2    -c2/J2];
+    Ac = [      0           1          0         0            0            0;
+          -(k1+k2)/J1  -(c1+c2)/J1   k2/J1     c2/J1          0            0;
+                0           0          0         1            0            0;
+              k2/J2       c2/J2     -k2/J2    -c2/J2          0            0;
+                0           1          0         0            0            0;
+                0           0          0         1            0            0];
     
     Bc = [   0       0   ;
            k1/J1  -k2/J1 ;
              0       0   ;
-             0     k2/J2];
-    
+             0     k2/J2 ;
+           -k1/J2     0   ;
+             0     -k2/J2];
+
     Cc = eye(size(Ac));
     
     Dc = 0;
@@ -66,11 +72,11 @@ for i = 1 : sampling_num
     % Constraints_py ver
     umin = [-(100.*3.141592/180.)-d*(100.*3.141592/180.); -(100.*3.141592/180.)-d*(100.*3.141592/180.)];
     umax = [ (100.*3.141592/180.)+d*(100.*3.141592/180.);  (100.*3.141592/180.)+d*(100.*3.141592/180.)];
-    xmin = [-(100.*3.141592/180.); -(100.*3.141592/180.); -(100.*3.141592/180.); -(100.*3.141592/180.);];
-    xmax = [ (100.*3.141592/180.);  (100.*3.141592/180.);  (100.*3.141592/180.);  (100.*3.141592/180.);];
+    xmin = [-(100.*3.141592/180.); -(100.*3.141592/180.); -(100.*3.141592/180.); -(100.*3.141592/180.); -(18.*3.141592/180.); -(18.*3.141592/180.)];
+    xmax = [ (100.*3.141592/180.);  (100.*3.141592/180.);  (100.*3.141592/180.);  (100.*3.141592/180.);  (18.*3.141592/180.);  (18.*3.141592/180.)];
     
     % Objective function
-    Q = diag([10 1 10 1]); %position control version
+    Q = diag([10 1 10 1 1 1]); %position control version
     QN = Q;
     R = 0.05*eye(2);
     
@@ -101,10 +107,20 @@ for i = 1 : sampling_num
         buf(1,j)=(k1+delay_1)/J1;
         delay_2=delta_2*exp(-Ts*j/tau);
     
-        Bc_j = [      0                  0       ;
-               (k1+delay_1)/J1  -(k2+delay_2)/J1 ;
-                      0                  0       ;
-                      0          (k2+delay_2)/J2];
+        Bc_j = [         0                               0             ;
+                  (k1+delay_1)/J1               -(k2+delay_2)/J1       ;
+                         0                               0             ;
+                         0                        (k2+delay_2)/J2      ;
+                k1*exp(-Ts*j/tau)/(J2*tau)               0             ;
+                         0                  k2*exp(-Ts*j/tau)/(J2*tau)];
+
+
+                Bc_j = [         0                               0             ;
+                  (k1+delay_1)/J1               -(k2+delay_2)/J1       ;
+                         0                               0             ;
+                         0                        (k2+delay_2)/J2      ;
+                -k1/J2               0             ;
+                         0                  -k2/J2];
     
         sys = ss(Ac, Bc_j, Cc, Dc);
         sysd = c2d(sys, Ts, 'zoh');
@@ -180,6 +196,24 @@ hold off
 xlabel('t[s]', 'FontName', 'Times New Roman', 'FontSize', 12, 'FontWeight', 'bold')
 ylabel('q2_dot', 'FontName', 'Times New Roman', 'FontSize', 12, 'FontWeight', 'bold')
 
+subplot(4,2,5)
+plot(t,rad2deg(X(5,:)), 'LineWidth', 2)
+hold on
+plot(0, rad2deg(X0(5,1)), 'bo', 'MarkerSize', 6, 'LineWidth', 1);
+plot(t,rad2deg(Xr(5,:)), '--r', 'LineWidth', 2)
+hold off
+xlabel('t[s]', 'FontName', 'Times New Roman', 'FontSize', 12, 'FontWeight', 'bold')
+ylabel('phi1', 'FontName', 'Times New Roman', 'FontSize', 12, 'FontWeight', 'bold')
+
+subplot(4,2,6)
+plot(t,rad2deg(X(6,:)), 'LineWidth', 2)
+hold on
+plot(0, rad2deg(X0(6,1)), 'bo', 'MarkerSize', 6, 'LineWidth', 1);
+plot(t,rad2deg(Xr(6,:)), '--r', 'LineWidth', 2)
+hold off
+xlabel('t[s]', 'FontName', 'Times New Roman', 'FontSize', 12, 'FontWeight', 'bold')
+ylabel('phi2', 'FontName', 'Times New Roman', 'FontSize', 12, 'FontWeight', 'bold')
+
 subplot(4,2,7)
 plot(t,rad2deg(U(1,:)), 'LineWidth', 2)
 xlabel('t[s]', 'FontName', 'Times New Roman', 'FontSize', 12, 'FontWeight', 'bold')
@@ -202,15 +236,19 @@ k2 = 2*5.9;
 c1 = 0.0001;
 c2 = 0.0001;
 
-A = [  0       1       0       0;
-    -k1/J1  -c1/J1   k2/J1     0;
-       0       0       0       1;
-       0       0    -k2/J2  -c2/J2];
+    A = [      0           1          0         0            0            0;
+          -(k1+k2)/J1  -(c1+c2)/J1   k2/J1     c2/J1          0            0;
+                0           0          0         1            0            0;
+              k2/J2       c2/J2     -k2/J2    -c2/J2          0            0;
+                0           1          0         0            0            0;
+                0           0          0         1            0            0];
 
-B = [  0       0;
-     k1/J1  -k2/J1;
-       0       0;
-       0     k2/J1];
+    B = [   0       0   ;
+           k1/J1  -k2/J1 ;
+             0       0   ;
+             0     k2/J2 ;
+           k1/J2     0   ;
+             0     k2/J2];
 
 C = eye(size(A));
 
