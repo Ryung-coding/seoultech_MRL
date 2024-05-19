@@ -1,5 +1,3 @@
-clear all
-clc
 
 %envirment setting
 Ts = 0.01; %s
@@ -89,7 +87,7 @@ buf_x(:,1)=[-1 0 1 0];
 for k=1:1:499
     buf_x(:,k+1)=Ad_motor*buf_x(:,k);
 end
-plot(buf_x(3,:))
+plot(buf_x(1,:))
 
 
 
@@ -143,13 +141,22 @@ QN = Q;                              %[q1 q1_dot q2 q2_dot theta1 theta1_dot the
 R_theta_des = diag([0.01 0.01]);         %[theta1_des theta2_des]
 R = R_theta_des;                     %[theta1_des theta2_des]
 
-Ad_model=[       Ad_SEA                  Bd_SEA;
-                zeros(size(Ad_motor))   Ad_motor];
+A_model=[       A_SEA                  B_SEA;
+                zeros(size(A_motor))   A_motor];
 
-Bd_model=[       zeros(size(Bd_SEA,1),2); 
-                Bd_motor              ];
+B_model=[       zeros(size(B_SEA,1),2); 
+                B_motor              ];
 
-[nx, nu] = size(Bd_model);
+[nx, nu] = size(B_model);
+
+C_model=eye(nx);
+D_model=zeros(size(B_model));
+
+
+sys = ss(A_model, B_model, C_model, D_model);
+sysd = c2d(sys, Ts, 'zoh');
+Ad_model=sysd.A;
+Bd_model=sysd.B;
 
 %%
 P = blkdiag( kron(speye(N), Q), QN, kron(speye(N), R) );
